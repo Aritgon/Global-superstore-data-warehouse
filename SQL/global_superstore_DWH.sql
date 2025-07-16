@@ -37,7 +37,7 @@ create table dim_location (
 	region text,
 	city text not null,
 
-	unique (market, country, state, city) -- composite unique key.
+	unique (market, country, state, city) -- composite unique key to force unique references.
 );
 
 with src as (
@@ -63,6 +63,7 @@ set market2 = excluded.market2,
 	region = excluded.region;
 
 select * from dim_location;
+
 -- create dim_product(product_key(PK,serial), product_id(business_id), product_name, sub_category, category)
 
 -- data sanity check.
@@ -268,3 +269,23 @@ select
 from fact_superstore as a
 join dim_product as b on b.product_key = a.product_key
 where b.product_key is null;
+
+select fact_key from fact_superstore;
+-- creating indexes for better performances while joining and multiple common calculations.
+create index if not exists idx_fact_fact_key on fact_superstore(fact_key);
+create index if not exists idx_dim_product_key on dim_product(product_key);
+create index if not exists idx_dim_customer_key on dim_customer(customer_key);
+create index if not exists idx_dim_location_key on dim_location(location_key);
+create index if not exists idx_dim_date_key on dim_date(date_key);
+
+-- indexes on fact date keys.
+create index if not exists idx_fact_order_date_key on fact_superstore(order_date_key);
+create index if not exists idx_fact_ship_date_key on fact_superstore(ship_date_key);
+
+select
+	extract(year from a.order_date::date) as selling_year,
+	b.segment,
+	sum(a.profit) as total_profit
+from fact_superstore as a
+join dim_product as b on b.product_key = a.product_key
+group by 1,2;
