@@ -44,7 +44,7 @@ Associated `Dimension` Tables (Dim_Product, Dim_Customer, Dim_location, Dim_Date
 
 ### Data model design patterns
 
-[ERD diagram](./pngs/star%20schema%20diagram.png)
+![ERD diagram](./pngs/star%20schema%20diagram.png)
 
 
 ### Improvements Achieved by Star Schema
@@ -52,8 +52,6 @@ Associated `Dimension` Tables (Dim_Product, Dim_Customer, Dim_location, Dim_Date
 - **Enhanced Business User Experience**: The intuitive and denormalized structure of a star schema makes it easier for non-technical users to understand the data model and build their own reports using self-service BI tools.
 
 - **Streamlined BI Tool Integration**: Tools like Power BI can directly map to a star schema with minimal setup, enabling efficient data exploration and dashboard creation without requiring complex data transformations within the BI tool itself.
-
-- **Simplified Aggregation**: Data is structured in a way that pre-calculation and aggregation (e.g., sum of sales by month) are simpler and more performant.
 
 - **Reduced Data Redundancy**: While dimension tables are denormalized for performance, the overall design still reduces analytical data redundancy compared to flat files or highly repeated data in a single table, improving data consistency for reporting.
 
