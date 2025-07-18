@@ -86,21 +86,20 @@ with src as (
 	product_id,
 	product_name,
 	sub_category,
-	category,
-	segment
+	category
 	from superstore
 	where product_id is not null
 	order by product_id, product_name
 )
 
-insert into dim_product (product_id, product_name, sub_category, category, segment)
+insert into dim_product (product_id, product_name, sub_category, category)
 select	* from src
 on conflict (product_id)
 do update
 set     product_name = EXCLUDED.product_name,
         sub_category = EXCLUDED.sub_category,
-        category     = EXCLUDED.category,
-		segment = excluded.segment;
+        category     = EXCLUDED.category;
+
 
 -- create dim_customer (customer_key, customer_id, customer_name)
 drop table if exists dim_customer;
@@ -198,7 +197,7 @@ create table fact_superstore (
 -- changing unique constraints.
 truncate table fact_superstore;
 
--- adding new column line_num for better data incremental.
+-- adding new column line_num for better data incremental by order_id.
 alter table fact_superstore
 add column line_num int;
 
@@ -282,10 +281,4 @@ create index if not exists idx_dim_date_key on dim_date(date_key);
 create index if not exists idx_fact_order_date_key on fact_superstore(order_date_key);
 create index if not exists idx_fact_ship_date_key on fact_superstore(ship_date_key);
 
-select
-	extract(year from a.order_date::date) as selling_year,
-	b.segment,
-	sum(a.profit) as total_profit
-from fact_superstore as a
-join dim_product as b on b.product_key = a.product_key
-group by 1,2;
+
