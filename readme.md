@@ -44,7 +44,7 @@ Associated `Dimension` Tables (Dim_Product, Dim_Customer, Dim_location, Dim_Date
 
 ### Data model design patterns
 
-![ERD diagram](./pngs/star%20schema%20diagram.png)
+![ERD diagram](./pngs/star%20schema%20ERD.png)
 
 
 ### Improvements Achieved by Star Schema
