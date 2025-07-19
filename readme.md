@@ -59,9 +59,9 @@ Associated `Dimension` Tables (Dim_Product, Dim_Customer, Dim_location, Dim_Date
 
 ## Analysis with SQL 
 
-1. How YoY growth of profit and sales looks like for each market? Which year has achieved most profit surpassing total sales that year? Which market has gained more profit?
+1. **How YoY growth of profit and sales looks like for each market? Which year has achieved most profit surpassing total sales that year? Which market has gained more profit?**
 
-> SQl Query:
+> SQL Query:
 ```
 with cte as (select
 	b.market,
@@ -101,6 +101,162 @@ select
 from final_cte;
 ```
 
-**Insight** : <i>*Several regions like Canada (2012), EMEA (2013–2014), and Africa (2013–2014) experienced exceptionally high profit margins, marking them as standout years.
+**Insight** : <i>*Several regions like **Canada (2012)**, **EMEA (2013–2014)**, and **Africa (2013–2014)** experienced exceptionally high profit margins, marking them as standout years.
 Most regions maintained positive margins across all years, reflecting stable performance.
-2013 stands out globally with multiple regions hitting peak profitability, indicating a strong business year.*</i>
+**2013** stands out globally with multiple regions hitting peak profitability, indicating a strong business year.*</i>
+
+
+2. **Which product categories and sub-categories are the top performers in terms of both sales and profit margin? Conversely, which are the least performing?"**
+
+> SQL query:
+```
+select
+	b.category,
+	b.sub_category,
+	sum(a.sales) as total_sales,
+	sum(a.profit) as total_profit,
+	rank() over (partition by b.category order by sum(a.sales) desc) as sales_rank,
+	rank() over (partition by b.category order by sum(a.profit) desc) as profit_rank
+from fact_superstore as a
+join dim_product as b on b.product_key = a.product_key
+group by 1,2
+order by sales_rank asc, profit_rank asc;
+```
+
+**Insight** : <i>**Phones**, **Storage**, and **Chairs** are the **top-performing** sub-categories by sales and profit, consistently ranking **1st** or **2nd** in both.
+**Copiers**, **Bookcases** and **Appliances** rank **2nd** in sales but **1st** in profit, making them highly profitable relative to revenue.
+**Tables** are a red flag with high sales but negative profit, indicating potential pricing or cost issues.</i>
+
+
+3. **Which countries contributed the most to overall sales and profit?**
+
+> SQL query:
+```
+with cte as (select
+	extract(year from a.order_date) as order_year,
+	b.country,
+	sum(a.sales) as total_sales,
+	sum(a.profit) as total_profit
+from fact_superstore as a
+join dim_location as b on b.location_key = a.location_key
+group by 1,2),
+
+rank_cte as (select
+	order_year,
+	country,
+	round((total_sales * 100 / (select sum(sales) from fact_superstore))::numeric ,2) as sales_contribution_pct,
+	round((total_profit * 100 / (select sum(profit) from fact_superstore))::numeric ,2) as profit_contribution_pct
+from cte),
+
+
+final_cte as (select
+	order_year,
+	country,
+	sales_contribution_pct,
+	profit_contribution_pct,
+	dense_rank() over (partition by order_year order by sales_contribution_pct desc) as sales_contribution_pct_rnk,
+	dense_rank() over (partition by order_year order by profit_contribution_pct desc) as profit_contribution_pct_rnk
+from rank_cte)
+
+select
+	order_year,
+	country,
+	sales_contribution_pct,
+	profit_contribution_pct,
+	sales_contribution_pct_rnk,
+	profit_contribution_pct_rnk
+from final_cte
+where sales_contribution_pct_rnk <= 5 and profit_contribution_pct_rnk <= 5;
+```
+
+**Insight** : <i>**United States** consistently leads *both* in *sales* and profit across all years, securing Rank **1** throughout.
+**China** shows strong profit growth, especially in *2013–2014*, despite *lower sales* ranks.
+**Australia** and **France** occasionally rank high in sales but don’t maintain top profitability, suggesting narrower margins.</i>
+
+
+4. **What is the average discount applied across different product categories, and how does this discount correlate with the resulting profit margin?"**
+
+> SQL query:
+```
+with cte as (select
+	extract(year from a.order_date) as order_year,
+	b.category,
+	round(avg(profit)::int, 2) as avg_profit,
+	lag(round(avg(profit), 2)) over (partition by b.category order by extract(year from a.order_date)) as prev_year_avg_profit,
+	round(avg(a.discount)::decimal, 3) as avg_discount_applied,
+	lag(round(avg(a.discount)::decimal, 3)) over (partition by b.category order by extract(year from a.order_date)) as prev_year_avg_discount
+from fact_superstore as a
+join dim_product as b on b.product_key = a.product_key
+group by 1, 2)
+
+select
+	order_year,
+	category,
+	avg_profit,
+	avg_discount_applied,
+	case
+		when avg_profit > prev_year_avg_profit and avg_discount_applied > prev_year_avg_discount
+		then 'both increased'
+		when avg_profit > prev_year_avg_profit and avg_discount_applied < prev_year_avg_discount
+		then 'profit incresed while discount dropped'
+		when avg_profit < prev_year_avg_profit and avg_discount_applied > prev_year_avg_discount
+		then 'profit dropped but discount increased'
+		when avg_profit < prev_year_avg_profit and avg_discount_applied < prev_year_avg_discount
+		then 'both dropped'
+	else 'unknown' -- handing edge cases of where previous year avg profit and discount is null because of lag().
+	end as yearly_profit_discount_trend
+from cte
+order by 2, 1;
+```
+
+**Insight** : <i>**Technology** consistently outperforms in profit across all years, showing a stable inverse relationship between *profit* and *discount*.
+**Furniture** exhibits volatile trends with both profit and discount rising and falling together, hinting at sensitivity to pricing strategies.
+**Office** Supplies show mixed behavior, with *2013 standing out for higher profit despite lower discount*, suggesting better efficiency or product mix that year.</i>
+
+
+5. **Customer Segmentation (RFM Analysis)**
+
+> SQL query:
+```
+with cte1 as (select
+	b.customer_id,
+	(select max(order_date) from fact_superstore) - max(a.order_date) as latest_order_date,
+	count(a.fact_key) as number_of_orders,
+	sum(a.sales) as total_sales
+from fact_superstore as a
+join dim_customer as b on b.customer_key = a.customer_key
+group by 1),
+
+rfm_cte as (
+	select
+		customer_id,
+		ntile(5) over (order by latest_order_date desc) as recency,
+		ntile(5) over (order by number_of_orders desc) as frequency,
+		ntile(5) over(order by total_sales desc) as monetary
+	from cte1
+)
+
+select
+	case
+	    when recency = 5 and frequency = 5 and monetary = 5 then 'Champions'
+	    when recency >= 4 and frequency >= 4 and monetary between 3 and 4 then 'Loyal Customers'
+	    when recency >= 4 and frequency between 3 and 4 and monetary >= 4 then 'Potential Loyalist'
+	    when recency between 3 and 4 and frequency between 3 and 4 and monetary >= 4 then 'High Value Customers'
+	    when recency between 3 and 5 and frequency between 1 and 3 and monetary >= 4 then 'Big Spenders'
+	    when recency between 3 and 5 and frequency between 1 and 2 and monetary <= 2 then 'Promising'
+	    when recency between 2 and 3 and frequency <= 2 and monetary <= 2 then 'About to Sleep'
+	    when recency = 1 and frequency >= 3 and monetary >= 4 then 'Cannot Lose Them'
+	    when recency = 1 and frequency between 1 and 2 and monetary >= 3 then 'Hibernating'
+	    when recency = 1 and frequency = 1 and monetary <= 2 then 'Lost'
+	    when frequency = 1 and monetary <= 2 and recency between 2 and 4 then 'New Customers'
+	    else 'Others'
+	end as rfm_category,
+	count(distinct customer_id) as customer_count
+from rfm_cte
+group by 1 
+order by 1 desc;
+```
+
+**Insight** : <i>The majority of customers fall into the **"Others"** **(2027)** and **"Promising" (1142)** segments, indicating a large base with *untapped potential*.
+Valuable segments like **"Loyal Customers"**, **"High Value Customers"**, and **"Champions"** are relatively small, highlighting room for `loyalty-building strategies`.
+**"Cannot Lose Them" (663)** and **"About to Sleep" (244)** require urgent attention to prevent `churn` of valuable or once-active customers.</i>
