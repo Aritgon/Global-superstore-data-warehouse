@@ -259,7 +259,88 @@ group by 1,2,3)
 
 -- join using left join to get customers who aren't active in the last 12 months.
 select
-	count(b.customer_id) as inactive
+	'Not active for last 12 months' as churn_customer_count, count(*) 
 from all_cte as a
 left join last_12_cte as b on b.customer_key = a.customer_key
-where b.customer_key is null;
+where b.customer_key is null
+union all
+select
+	'active before the last 12 months', count(*)
+from all_cte as a
+left join last_12_cte as b on b.customer_key = a.customer_key
+where b.customer_key is not null;
+
+
+-- monthly churn rate.
+-- get customer's signup or first activity year, first and last activity date.
+
+with joined_cte as (
+	select
+		market,
+		extract(month from order_date) as month_joined,
+		customer_id,
+		min(extract(month from order_date)) as first_activity_month,
+		max(extract(month from order_date)) as last_activity_month
+	from fact_superstore as a
+	join dim_location as b on b.location_key = a.location_key
+	join dim_customer as c on c.customer_key = a.customer_key
+	group by 1,2,3
+),
+
+-- temporary dim_date cte.
+temp_month_cte as (
+	select
+		max(month) as latest_month
+	from dim_date
+),
+
+-- churned month.
+churned_cte as (
+	select
+		a.market,
+		a.month_joined,
+		count(*) as churned_count
+	from joined_cte as a
+	cross join temp_month_cte as b
+	where a.month_joined < (b.latest_month - 3)
+	group by 1,2
+),
+
+-- month wise total user count.
+total_cte as (
+	select
+		market, 
+		month_joined,
+		count(*) as total_user_count
+	from joined_cte
+	group by 1,2
+)
+
+-- left join total_cte with churned_cte to find out which customers are being null.
+select
+	a.market,
+	a.month_joined,
+	a.total_user_count,
+	coalesce(b.churned_count, 0) as churned_user_count,
+	round(coalesce(b.churned_count, 0) * 100 / a.total_user_count, 2) as monthly_churn_rate
+from total_cte as a
+left join churned_cte as b on b.market = a.market and b.month_joined = a.month_joined;
+
+-- Yearly top 10 products by profit by each market.
+
+with cte as (select
+	b.market,
+	extract(year from a.order_date) as order_year,
+	c.product_name,
+	sum(a.sales) as total_sales,
+	sum(a.profit) as total_profit,
+	rank() over (partition by b.market,extract(year from a.order_date) order by sum(a.profit) desc) as profit_rnk
+from fact_superstore as a
+join dim_location as b on b.location_key = a.location_key
+join dim_product as c on c.product_key = a.product_key
+group by 1,2,3)
+
+select
+	*
+from cte
+where profit_rnk <= 10;

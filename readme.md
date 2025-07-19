@@ -57,3 +57,47 @@ Associated `Dimension` Tables (Dim_Product, Dim_Customer, Dim_location, Dim_Date
 
 ---
 
+## Analysis with SQL 
+
+```
+with cte as (select
+	b.market,
+	extract(year from a.order_date) as selling_year,
+	sum(a.sales) as total_sales,
+	sum(a.profit) as total_profit
+from fact_superstore as a
+join dim_location as b on b.location_key = a.location_key
+group by 1,2),
+
+second_cte as (select
+	market,
+	selling_year,
+	total_sales,
+	total_profit,
+	lag(total_sales) over (partition by market order by total_sales) as prev_year_sales,
+	lag(total_profit) over (partition by market order by total_profit) as prev_year_profit
+from cte),
+
+final_cte as (select
+	market,
+	selling_year,
+	round(((total_sales - prev_year_sales) * 100 / prev_year_sales)::numeric , 2) as YoY_sales_growth,
+	round(((total_profit - prev_year_profit) * 100 / prev_year_profit)::numeric , 2) as YoY_profit_growth
+from second_cte
+where prev_year_sales is not null and prev_year_profit is not null)
+
+select
+	market,
+	selling_year,
+	YoY_sales_growth,
+	YoY_profit_growth,
+	case
+		when YoY_profit_growth > YoY_sales_growth then 'High Profit Margin Year'
+		else 'Positive Profit Margin Year'
+	end as profit_bin
+from final_cte;
+```
+
+**Insight** : __*Several regions like Canada (2012), EMEA (2013–2014), and Africa (2013–2014) experienced exceptionally high profit margins, marking them as standout years.
+Most regions maintained positive margins across all years, reflecting stable performance.
+2013 stands out globally with multiple regions hitting peak profitability, indicating a strong business year.*__
