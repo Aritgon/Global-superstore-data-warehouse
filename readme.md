@@ -59,6 +59,9 @@ Associated `Dimension` Tables (Dim_Product, Dim_Customer, Dim_location, Dim_Date
 
 ## Analysis with SQL 
 
+1. How YoY growth of profit and sales looks like for each market? Which year has achieved most profit surpassing total sales that year? Which market has gained more profit?
+
+> SQl Query:
 ```
 with cte as (select
 	b.market,
@@ -98,6 +101,6 @@ select
 from final_cte;
 ```
 
-**Insight** : __*Several regions like Canada (2012), EMEA (2013–2014), and Africa (2013–2014) experienced exceptionally high profit margins, marking them as standout years.
+**Insight** : <i>*Several regions like Canada (2012), EMEA (2013–2014), and Africa (2013–2014) experienced exceptionally high profit margins, marking them as standout years.
 Most regions maintained positive margins across all years, reflecting stable performance.
-2013 stands out globally with multiple regions hitting peak profitability, indicating a strong business year.*__
+2013 stands out globally with multiple regions hitting peak profitability, indicating a strong business year.*</i>
