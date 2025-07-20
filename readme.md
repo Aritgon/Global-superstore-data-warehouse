@@ -220,7 +220,7 @@ order by 2, 1;
 ```
 with cte1 as (select
 	b.customer_id,
-	(select max(order_date) from fact_superstore) - max(a.order_date) as latest_order_date,
+	(select max(order_date) from fact_superstore) - max(a.order_date) as latest_order_date_diff,
 	count(a.fact_key) as number_of_orders,
 	sum(a.sales) as total_sales
 from fact_superstore as a
@@ -230,33 +230,64 @@ group by 1),
 rfm_cte as (
 	select
 		customer_id,
-		ntile(5) over (order by latest_order_date desc) as recency,
-		ntile(5) over (order by number_of_orders desc) as frequency,
-		ntile(5) over(order by total_sales desc) as monetary
+		latest_order_date_diff,
+		number_of_orders,
+		total_sales,
+		ntile(5) over (order by latest_order_date_diff desc) as recency_score,
+		ntile(5) over (order by number_of_orders desc) as frequency_score,
+		ntile(5) over(order by total_sales desc) as monetary_score
 	from cte1
 )
 
 select
-	case
-	    when recency = 5 and frequency = 5 and monetary = 5 then 'Champions'
-	    when recency >= 4 and frequency >= 4 and monetary between 3 and 4 then 'Loyal Customers'
-	    when recency >= 4 and frequency between 3 and 4 and monetary >= 4 then 'Potential Loyalist'
-	    when recency between 3 and 4 and frequency between 3 and 4 and monetary >= 4 then 'High Value Customers'
-	    when recency between 3 and 5 and frequency between 1 and 3 and monetary >= 4 then 'Big Spenders'
-	    when recency between 3 and 5 and frequency between 1 and 2 and monetary <= 2 then 'Promising'
-	    when recency between 2 and 3 and frequency <= 2 and monetary <= 2 then 'About to Sleep'
-	    when recency = 1 and frequency >= 3 and monetary >= 4 then 'Cannot Lose Them'
-	    when recency = 1 and frequency between 1 and 2 and monetary >= 3 then 'Hibernating'
-	    when recency = 1 and frequency = 1 and monetary <= 2 then 'Lost'
-	    when frequency = 1 and monetary <= 2 and recency between 2 and 4 then 'New Customers'
-	    else 'Others'
-	end as rfm_category,
-	count(distinct customer_id) as customer_count
+	CASE
+            WHEN recency_score >= 4 AND frequency_score >= 4 AND monetary_score >= 4 THEN 'Champions'
+            WHEN recency_score >= 3 AND frequency_score >= 4 AND monetary_score >= 3 THEN 'Loyal Customers'
+            WHEN recency_score >= 4 AND frequency_score BETWEEN 2 AND 3 AND monetary_score >= 3 THEN 'Potential Loyalists'
+            WHEN recency_score >= 4 AND frequency_score <= 2 THEN 'New Customers'
+            WHEN recency_score >= 4 AND frequency_score <= 3 AND monetary_score <= 3 THEN 'Promising'
+            WHEN recency_score <= 2 AND frequency_score >= 4 AND monetary_score >= 4 THEN 'Cannot Lose Them'
+            WHEN recency_score <= 2 AND frequency_score >= 3 AND monetary_score >= 3 THEN 'At Risk'
+            WHEN monetary_score >= 4 AND frequency_score <= 2 THEN 'Big Spenders'
+            WHEN recency_score = 3 AND frequency_score = 3 AND monetary_score = 3 THEN 'Need Attention'
+            WHEN recency_score <= 3 AND frequency_score <= 2 AND monetary_score <= 3 THEN 'About to Sleep'
+            WHEN recency_score <= 2 AND frequency_score BETWEEN 1 AND 2 AND monetary_score <= 3 THEN 'Hibernating'
+            WHEN recency_score <= 2 AND frequency_score <= 2 AND monetary_score <= 2 THEN 'Lost'
+            ELSE 'Others'
+        END AS rfm_segment,
+		count(distinct customer_id) as customer_count,
+
+		-- numerics.
+		round(avg(latest_order_date_diff)::numeric, 2) as avg_delivery_timing,
+		round(avg(number_of_orders)::numeric, 2) as avg_order_count,
+		round(avg(total_sales)::numeric, 2) as avg_sales_amount
 from rfm_cte
-group by 1 
-order by 1 desc;
+group by 1;
 ```
 
-**Insight** : <i>The majority of customers fall into the **"Others"** **(2027)** and **"Promising" (1142)** segments, indicating a large base with *untapped potential*.
-Valuable segments like **"Loyal Customers"**, **"High Value Customers"**, and **"Champions"** are relatively small, highlighting room for `loyalty-building strategies`.
-**"Cannot Lose Them" (663)** and **"About to Sleep" (244)** require urgent attention to prevent `churn` of valuable or once-active customers.</i>
+**Insight** : **"New Customers"** and **"Promising"** segments show **high average order value**, making them prime for conversion into loyal buyers.
+**"Cannot Lose Them"** has the *highest total profit*, but *very low frequency*, signaling a need for re-engagement strategies.
+**"Champions"** and **"Loyal Customers"** offer steady, reliable profits — perfect for upselling and retention campaigns.
+
+---
+
+### Further Analysis
+
+Only key insights are included in this document.
+You can explore the complete set of SQL ad-hoc analyses by checking the `SQL_analysis.sql` file from the `/SQL` folder in this repository.
+Feel free to clone the repo or download the file directly to run and explore the queries yourself.
+
+### Tools Used
+
+- `pandas` - To explore the dataset and upload it to `postgresql` database.
+- `PostgreSQL` - used it to design the data warehouse and do EDA using SQL.
+- `VS Code` - for writing the documentation.
+- `Git & GitHub` - for uploading the project.
+
+### A note
+This project is a work in progress and may continue to evolve as I explore deeper patterns or add more advanced queries.
+
+Stay tuned for updates — contributions and feedback are always welcome!
+
+
+# Signing off 🙋‍♂️

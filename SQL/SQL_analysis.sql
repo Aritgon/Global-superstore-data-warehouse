@@ -52,8 +52,7 @@ join dim_product as b on b.product_key = a.product_key
 group by 1,2
 order by sales_rank asc, profit_rank asc;
 
--- "Which countries and regions contribute the most to overall sales and profit, 
--- and are there any emerging or declining markets?"
+-- "Which countries contributed the most to overall sales and profit?
 
 with cte as (select
 	extract(year from a.order_date) as order_year,
@@ -170,47 +169,69 @@ order by 1, 3 desc;
 
 -- Customer Segmentation (RFM Analysis).
 -- Ntile() over (order by ...) -> this will return max of higher frequency as 5 and the least will be 1. 
--- most latest_order_date, frequency and monetary will be as 5.
+-- most latest_order_date, frequency and monetary will be marked as 5.
 
 
 with cte1 as (select
 	b.customer_id,
-	b.customer_name,
-	(select max(order_date) from fact_superstore) - max(a.order_date) as latest_order_date,
+	(select max(order_date) from fact_superstore) - max(a.order_date) as latest_order_date_diff,
 	count(a.fact_key) as number_of_orders,
 	sum(a.sales) as total_sales
 from fact_superstore as a
 join dim_customer as b on b.customer_key = a.customer_key
-group by 1,2),
+group by 1),
 
 rfm_cte as (
 	select
 		customer_id,
-		customer_name,
-		ntile(5) over (order by latest_order_date desc) as recency,
-		ntile(5) over (order by number_of_orders desc) as frequency,
-		ntile(5) over(order by total_sales desc) as monetary
+		latest_order_date_diff,
+		number_of_orders,
+		total_sales,
+		ntile(5) over (order by latest_order_date_diff desc) as recency_score,
+		ntile(5) over (order by number_of_orders desc) as frequency_score,
+		ntile(5) over(order by total_sales desc) as monetary_score
 	from cte1
 )
 
 select
-	case
-	    when recency = 5 and frequency = 5 and monetary = 5 then 'Champions'
-	    when recency >= 4 and frequency >= 4 and monetary between 3 and 4 then 'Loyal Customers'
-	    when recency >= 4 and frequency between 3 and 4 and monetary >= 4 then 'Potential Loyalist'
-	    when recency between 3 and 4 and frequency between 3 and 4 and monetary >= 4 then 'High Value Customers'
-	    when recency between 3 and 5 and frequency between 1 and 3 and monetary >= 4 then 'Big Spenders'
-	    when recency between 3 and 5 and frequency between 1 and 2 and monetary <= 2 then 'Promising'
-	    when recency between 2 and 3 and frequency <= 2 and monetary <= 2 then 'About to Sleep'
-	    when recency = 1 and frequency >= 3 and monetary >= 4 then 'Cannot Lose Them'
-	    when recency = 1 and frequency between 1 and 2 and monetary >= 3 then 'Hibernating'
-	    when recency = 1 and frequency = 1 and monetary <= 2 then 'Lost'
-	    when frequency = 1 and monetary <= 2 and recency between 2 and 4 then 'New Customers'
-	    else 'Others'
-	end as rfm_category,
-	count(distinct customer_id) as customer_count
+	CASE
+            WHEN recency_score >= 4 AND frequency_score >= 4 AND monetary_score >= 4 THEN 'Champions'
+            WHEN recency_score >= 3 AND frequency_score >= 4 AND monetary_score >= 3 THEN 'Loyal Customers'
+            WHEN recency_score >= 4 AND frequency_score BETWEEN 2 AND 3 AND monetary_score >= 3 THEN 'Potential Loyalists'
+            WHEN recency_score >= 4 AND frequency_score <= 2 THEN 'New Customers'
+            WHEN recency_score >= 4 AND frequency_score <= 3 AND monetary_score <= 3 THEN 'Promising'
+            WHEN recency_score <= 2 AND frequency_score >= 4 AND monetary_score >= 4 THEN 'Cannot Lose Them'
+            WHEN recency_score <= 2 AND frequency_score >= 3 AND monetary_score >= 3 THEN 'At Risk'
+            WHEN monetary_score >= 4 AND frequency_score <= 2 THEN 'Big Spenders'
+            WHEN recency_score = 3 AND frequency_score = 3 AND monetary_score = 3 THEN 'Need Attention'
+            WHEN recency_score <= 3 AND frequency_score <= 2 AND monetary_score <= 3 THEN 'About to Sleep'
+            WHEN recency_score <= 2 AND frequency_score BETWEEN 1 AND 2 AND monetary_score <= 3 THEN 'Hibernating'
+            WHEN recency_score <= 2 AND frequency_score <= 2 AND monetary_score <= 2 THEN 'Lost'
+            ELSE 'Others'
+        END AS rfm_segment,
+		count(distinct customer_id) as customer_count,
+
+		-- numerics.
+		round(avg(latest_order_date_diff)::numeric, 2) as avg_delivery_timing,
+		round(avg(number_of_orders)::numeric, 2) as avg_order_count,
+		round(avg(total_sales)::numeric, 2) as avg_sales_amount
 from rfm_cte
-group by 1 order by 1 desc;
+group by 1;
+
+-- checking recency logic.
+with cte as (select
+	customer_id,
+	(select max(order_date) from fact_superstore) - max(order_date) as delivery_day_gap
+from fact_superstore as a
+join dim_customer as b on b.customer_key = a.customer_key
+group by 1)
+
+select
+	customer_id,
+	delivery_day_gap,
+	ntile(5) over (order by delivery_day_gap desc) as day_rank
+from cte;
+
 
 -- seasonal analysis of profit and sales.
 
@@ -224,8 +245,8 @@ select
 	    WHEN d.month IN (9, 10, 11) THEN 'Fall'
 	END AS season,
 	count(a.fact_key) as total_order_count,
-	sum(a.sales) as total_sales,
-	sum(a.profit) as total_profit
+	avg(a.sales) as avg_total_sales,
+	avg(a.profit) as avg_total_profit
 from fact_superstore as a
 join dim_product as b on b.product_key = a.product_key
 join dim_location as c on c.location_key = a.location_key
