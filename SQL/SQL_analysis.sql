@@ -191,9 +191,9 @@ rfm_cte as (
 		ntile(5) over (order by number_of_orders desc) as frequency_score,
 		ntile(5) over(order by total_sales desc) as monetary_score
 	from cte1
-)
+),
 
-select
+final_cte as (select
 	CASE
             WHEN recency_score >= 4 AND frequency_score >= 4 AND monetary_score >= 4 THEN 'Champions'
             WHEN recency_score >= 3 AND frequency_score >= 4 AND monetary_score >= 3 THEN 'Loyal Customers'
@@ -216,7 +216,14 @@ select
 		round(avg(number_of_orders)::numeric, 2) as avg_order_count,
 		round(avg(total_sales)::numeric, 2) as avg_sales_amount
 from rfm_cte
-group by 1;
+group by 1)
+
+-- RFM segment and its percentage to total customer count.
+select
+	rfm_segment,
+	round(customer_count * 100 / (select sum(customer_count) from final_cte) , 2) as customer_percentage
+from final_cte
+order by 2 desc;
 
 -- checking recency logic.
 with cte as (select
@@ -365,3 +372,69 @@ select
 	*
 from cte
 where profit_rnk <= 10;
+
+-- category and sub-category avg profit and its proportion to the category.
+
+with cte as (select
+	b.category,
+	b.sub_category,
+	sum(a.profit) as total_profit
+from fact_superstore as a
+join dim_product as b on a.product_key = b.product_key
+group by 1, 2
+order by 1),
+
+category_cte as (
+	select
+		b.category,
+		sum(a.profit) as category_profit
+	from fact_superstore as a
+	join dim_product as b on b.product_key = a.product_key
+	group by 1
+)
+
+select
+	a.category,
+	a.sub_category,
+	a.total_profit as sub_category_total,
+	round(a.total_profit * 100 / b.category_profit, 2) as profit_share
+from cte as a
+join category_cte as b on b.category = a.category;
+
+
+-- cohort analysis.
+with customer_first_order as (
+	select
+		b.customer_key,
+		b.customer_id,
+		b.customer_name,
+		min(date_trunc('year', a.order_date)) as cohort_year,
+		min(date_trunc('month', a.order_date)) as cohort_month
+	from fact_superstore as a
+	join dim_customer as b on b.customer_key = a.customer_key
+	group by 1,2, 3
+), 
+
+-- normal order date.
+order_cte as (
+	select
+		b.customer_id,
+		date_trunc('month', a.order_date) as order_date,
+		date_trunc('year', a.order_date) as order_year,
+		b.cohort_month,
+		b.cohort_year,
+		extract(year from age(date_trunc('year', a.order_date), b.cohort_month)) * 12 + extract(month from age(date_trunc('month', a.order_date), b.cohort_month)) as cohort_month_index,
+		extract(year from age(date_trunc('year', a.order_date), b.cohort_year)) as cohort_year_index
+	from fact_superstore as a
+	join customer_first_order as b on b.customer_key = a.customer_key
+)
+
+select
+	cohort_year,
+	cohort_month,
+	cohort_year_index,
+	cohort_month_index,
+	count(distinct customer_id) as customer_count
+from order_cte
+group by 1,2,3,4
+order by 1,2;

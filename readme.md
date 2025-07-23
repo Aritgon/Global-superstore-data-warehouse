@@ -101,6 +101,7 @@ select
 from final_cte;
 ```
 
+
 **Insight** : <i>*Several regions like **Canada (2012)**, **EMEA (2013–2014)**, and **Africa (2013–2014)** experienced exceptionally high profit margins, marking them as standout years.
 Most regions maintained positive margins across all years, reflecting stable performance.
 **2013** stands out globally with multiple regions hitting peak profitability, indicating a strong business year.*</i>
@@ -122,6 +123,7 @@ join dim_product as b on b.product_key = a.product_key
 group by 1,2
 order by sales_rank asc, profit_rank asc;
 ```
+
 
 **Insight** : <i>**Phones**, **Storage**, and **Chairs** are the **top-performing** sub-categories by sales and profit, consistently ranking **1st** or **2nd** in both.
 **Copiers**, **Bookcases** and **Appliances** rank **2nd** in sales but **1st** in profit, making them highly profitable relative to revenue.
@@ -169,6 +171,7 @@ from final_cte
 where sales_contribution_pct_rnk <= 5 and profit_contribution_pct_rnk <= 5;
 ```
 
+
 **Insight** : <i>**United States** consistently leads *both* in *sales* and profit across all years, securing Rank **1** throughout.
 **China** shows strong profit growth, especially in *2013–2014*, despite *lower sales* ranks.
 **Australia** and **France** occasionally rank high in sales but don’t maintain top profitability, suggesting narrower margins.</i>
@@ -208,6 +211,7 @@ select
 from cte
 order by 2, 1;
 ```
+
 
 **Insight** : <i>**Technology** consistently outperforms in profit across all years, showing a stable inverse relationship between *profit* and *discount*.
 **Furniture** exhibits volatile trends with both profit and discount rising and falling together, hinting at sensitivity to pricing strategies.
@@ -264,6 +268,7 @@ select
 from rfm_cte
 group by 1;
 ```
+
 
 **Insight** : **"New Customers"** and **"Promising"** segments show **high average order value**, making them prime for conversion into loyal buyers.
 **"Cannot Lose Them"** has the *highest total profit*, but *very low frequency*, signaling a need for re-engagement strategies.
